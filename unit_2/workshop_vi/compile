@@ -1,0 +1,5 @@
+#!/bin/bash
+nasm -f elf64 truth_table.asm -o truth_table.o
+ld truth_table.o -o truth_table
+rm truth_table.o
+echo "Compiled successfully!"

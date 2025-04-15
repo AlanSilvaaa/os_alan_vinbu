@@ -17,3 +17,6 @@ To compile the code, you just need to execute the compile script:
 
 ## Run
 To run the code, execute the `truth_table`
+```bash
+./truth_table
+```

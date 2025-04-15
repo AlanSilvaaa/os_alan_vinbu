@@ -17,6 +17,7 @@ _start:
     syscall
 
     ; Pushes the value 1 to the stack
+    ; estaba probando cosas, puedes ignorar esto
     mov rax, 1
     inc rax
     push rax

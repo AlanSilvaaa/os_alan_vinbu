@@ -5,9 +5,6 @@ section .data
 section .text
     global _start
 
-; section .bss
-;     and_value resb 8
-
 _start:
     ; Prints the string "And:"
     mov rax, 1
@@ -16,27 +13,36 @@ _start:
     mov rdx, and_len
     syscall
 
+    ; Pushes the input values (for now hardcoded to 1 and 0)
     mov rax, 1
     mov rdi, 0
     push rax
     push rdi
 
-    mov rax, [rsp] ; read the first value
-    mov rdi, [rsp+8] ; read the second value
-    imul rax, rdi ; multiply the two values
+    ; Multiplies the two values on the stack (AND operation)
+    mov rax, [rsp]
+    mov rdi, [rsp+8]
+    imul rax, rdi
     push rax
 
-    ; Pushes the value 1 to the stack
-    mov rax, [rsp]; constant 0 on ASCII
+    ; Converts the result to ASCII using +48 (the number 0 in ASCII)
+    mov rax, [rsp]; 
     add rax, 48
     push rax
 
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, rsp
-    mov rdx, 1
+    call print_result
+
+    ; Exits
+    mov rax, 60
+    mov rdi, 0
     syscall
 
-    mov rax, 60
-    mov rdi, [rsp]
+print_result:
+    ; Prints the result
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rsp+8] ; When assembly calls a function, it stores a return address into the stack, so in order to read the actual value we want, we need to add 8 bytes to the stack pointer.
+    mov rdx, 1
     syscall
+    ret
+

@@ -16,10 +16,19 @@ _start:
     mov rdx, and_len
     syscall
 
-    ; Pushes the value 1 to the stack
-    ; estaba probando cosas, puedes ignorar esto
     mov rax, 1
-    inc rax
+    mov rdi, 0
+    push rax
+    push rdi
+
+    mov rax, [rsp] ; read the first value
+    mov rdi, [rsp+8] ; read the second value
+    imul rax, rdi ; multiply the two values
+    push rax
+
+    ; Pushes the value 1 to the stack
+    mov rax, [rsp]; constant 0 on ASCII
+    add rax, 48
     push rax
 
     mov rax, 1

@@ -1,0 +1,12 @@
+FROM ubuntu:jammy
+
+WORKDIR /app
+
+COPY . .
+
+RUN apt-get update && \
+    apt install -y nasm binutils
+
+RUN "./compile"
+
+CMD ["./truth_table"]

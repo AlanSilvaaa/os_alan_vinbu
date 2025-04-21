@@ -25,7 +25,7 @@ _start:
     syscall
 
     ; Makes the AND operation and prints the result
-    call add_op
+    call and_op
     push rax
     call print_result
     pop rax ; Pops the result of the AND operation so in the stack there's only the two inputs.
@@ -49,10 +49,10 @@ _start:
     syscall
 
 
-; add_op
+; and_op
 ; +-------------------------------------+
 ; Does the AND operation: (A * B)
-add_op:
+and_op:
     ; copy the inputs to rax and rdi
     mov rax, [rsp+8]
     mov rdi, [rsp+16]

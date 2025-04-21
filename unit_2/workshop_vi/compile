@@ -1,5 +1,9 @@
 #!/bin/bash
+set -e # Exit immediately if a command exits with a non-zero status.
+
 nasm -f elf64 truth_table.asm -o truth_table.o
 ld truth_table.o -o truth_table
 rm truth_table.o
+
 echo "Compiled successfully!"
+

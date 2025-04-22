@@ -5,6 +5,15 @@ section .data
     or_msg db "Or: "
     or_len equ $ - or_msg
 
+    xor_msg db "Xor: "
+    xor_len equ $ - xor_msg
+
+    not1_msg db "Not of first input: "
+    not1_len equ $ - not1_msg
+
+    not2_msg db "Not of second input: "
+    not2_len equ $ - not2_msg
+
     newline db 0xA
 
 section .text
@@ -39,6 +48,45 @@ _start:
 
     ; Makes the OR operation and prints the result
     call or_op
+    push rax
+    call print_result
+    pop rax
+
+    ; Prints the string "Xor:"
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, xor_msg
+    mov rdx, xor_len
+    syscall
+
+    ; Makes the XOR operation and prints the result
+    call xor_op
+    push rax
+    call print_result
+    pop rax
+
+    ; Prints the string "Not of the first input:"
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, not1_msg
+    mov rdx, not1_len
+    syscall
+
+    ; Makes the NOT operation and prints the result
+    call not1_op
+    push rax
+    call print_result
+    pop rax
+
+    ; Prints the string "Not of the second input:"
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, not2_msg
+    mov rdx, not2_len
+    syscall
+
+    ; Makes the NOT operation and prints the result
+    call not2_op
     push rax
     call print_result
     pop rax
@@ -78,6 +126,47 @@ or_op:
 
     ; (A + B) - (A * B)
     sub rax, rcx
+    ret
+
+
+; xor_op
+; +-------------------------------------+
+; Does the XOR operation: (A + B) - 2(A * B)
+xor_op:
+    ; copy the inputs to rax and rdi
+    mov rax, [rsp+8]
+    mov rdi, [rsp+16]
+
+    ; 2(A * B)
+    mov rcx, rax
+    imul rcx, rdi
+    imul rcx, 2
+
+    ; (A + B)
+    add rax, rdi
+
+    ; (A + B) - 2(A * B)
+    sub rax, rcx
+    ret
+
+
+; not1_op
+; +-------------------------------------+
+; Does the NOT operation: (1 - A)
+not1_op:
+    mov rdi, [rsp+16] ; first input
+    mov rax, 1
+    sub rax, rdi
+    ret
+
+
+; not2_op
+; +-------------------------------------+
+; Does the NOT operation: (1 - A)
+not2_op:
+    mov rdi, [rsp+8] ; second input
+    mov rax, 1
+    sub rax, rdi
     ret
 
 

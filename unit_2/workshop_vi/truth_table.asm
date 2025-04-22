@@ -1,23 +1,27 @@
 section .data
-    and_msg db "And: "
+    vertical_line db "+----------------------+", 0xA
+    vertical_line_len equ $ - vertical_line
+
+    and_msg db "| And: | "
     and_len equ $ - and_msg
 
-    or_msg db "Or: "
+    or_msg db "| Or: | "
     or_len equ $ - or_msg
 
-    xor_msg db "Xor: "
+    xor_msg db "| Xor: | "
     xor_len equ $ - xor_msg
 
-    not1_msg db "Not of first input: "
+    not1_msg db "| Not of first input: | "
     not1_len equ $ - not1_msg
 
-    not2_msg db "Not of second input: "
+    not2_msg db "| Not of second input: | "
     not2_len equ $ - not2_msg
 
     newline db 0xA
 
 section .text
     global _start
+
 
 _start:
     ; Pushes the input values (for now hardcoded to 1 and 0)
@@ -182,7 +186,7 @@ print_result:
     ; at this point the stack looks like this:
     ; (ASCII value, return address, operation_result, input2, input1)
 
-    ; Prints the result
+    ; prints the result
     mov rax, 1
     mov rdi, 1
     lea rsi, [rsp] 
@@ -194,6 +198,13 @@ print_result:
     mov rdi, 1
     lea rsi, newline 
     mov rdx, 1
+    syscall
+
+    ; prints the result
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, vertical_line 
+    mov rdx, vertical_line_len
     syscall
 
     pop rax ; Pops the value pushed before so the stack pointer is again the return address.

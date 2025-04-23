@@ -5,8 +5,14 @@ section .data
     box_line db "-"
     box_line_len equ 1
 
+    box_outline db "|"
+    box_outline_len equ 1
+
     whitespace db " "
     whitespace_len equ 1
+
+    title db "| Truth table "
+    title_len equ $ - title
 
     and_msg db "| And: | "
     and_len equ $ - and_msg
@@ -27,7 +33,8 @@ section .data
     width_box_line dq 30
 
 section .bss
-    fill_box_count resb 1
+    fill_box_count resq 1
+    current_len resq 1
 
 section .text
     global _start
@@ -41,7 +48,37 @@ _start:
     push rdi
 
     ; prints top of the box (+------------+)
-    call print_table
+    call print_horizontal_line
+
+    ; Prints the string "Truth table"
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, title
+    mov rdx, title_len
+    syscall
+
+    ; Prints a whitespace
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, whitespace
+    mov rdx, 1
+    syscall
+
+    ; Saves the length of the string "Truth table" to the current_len variable
+    mov rax, title_len
+    mov [current_len], rax
+
+    call fill_box
+
+    ; Prints a newline
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, newline
+    mov rdx, 1
+    syscall
+
+    ; prints top of the box (+------------+)
+    call print_horizontal_line
 
     ; Prints the string "And:"
     mov rax, 1
@@ -50,13 +87,9 @@ _start:
     mov rdx, and_len
     syscall
 
-    ; call fill_box
-    ; ; prints the result
-    ; mov rax, 1
-    ; mov rdi, 1
-    ; lea rsi, [fill_box_count] 
-    ; mov rdx, 1
-    ; syscall
+    ; Saves the length of the string "And:" to the current_len variable
+    mov rax, and_len
+    mov [current_len], rax
 
     ; Makes the AND operation and prints the result
     call and_op
@@ -64,6 +97,10 @@ _start:
     call print_result
     pop rax ; Pops the result of the AND operation so in the stack there's only the two inputs.
 
+
+    ; prints top of the box (+------------+)
+    call print_horizontal_line
+    
     ; Prints the string "Or:"
     mov rax, 1
     mov rdi, 1
@@ -71,11 +108,18 @@ _start:
     mov rdx, or_len
     syscall
 
+    ; Saves the length of the string "Or:" to the current_len variable
+    mov rax, or_len
+    mov [current_len], rax
+
     ; Makes the OR operation and prints the result
     call or_op
     push rax
     call print_result
     pop rax
+
+    ; prints top of the box (+------------+)
+    call print_horizontal_line
 
     ; Prints the string "Xor:"
     mov rax, 1
@@ -84,11 +128,18 @@ _start:
     mov rdx, xor_len
     syscall
 
+    ; Saves the length of the string "Xor:" to the current_len variable
+    mov rax, xor_len
+    mov [current_len], rax
+
     ; Makes the XOR operation and prints the result
     call xor_op
     push rax
     call print_result
     pop rax
+
+    ; prints top of the box (+------------+)
+    call print_horizontal_line
 
     ; Prints the string "Not of the first input:"
     mov rax, 1
@@ -97,11 +148,18 @@ _start:
     mov rdx, not1_len
     syscall
 
+    ; Saves the length of the string "Not of first input:" to the current_len variable
+    mov rax, not1_len
+    mov [current_len], rax
+
     ; Makes the NOT operation and prints the result
     call not1_op
     push rax
     call print_result
     pop rax
+
+    ; prints top of the box (+------------+)
+    call print_horizontal_line
 
     ; Prints the string "Not of the second input:"
     mov rax, 1
@@ -110,11 +168,18 @@ _start:
     mov rdx, not2_len
     syscall
 
+    ; Saves the length of the string "Not of second input" to the current_len variable
+    mov rax, not2_len
+    mov [current_len], rax
+
     ; Makes the NOT operation and prints the result
     call not2_op
     push rax
     call print_result
     pop rax
+
+    ; prints top of the box (+------------+)
+    call print_horizontal_line
 
     ; Exits
     mov rax, 60
@@ -214,11 +279,9 @@ print_result:
     mov rdx, 1
     syscall
 
-    ; mov rax, width_box_line
-    ; sub rax, and_len
-    ; mov [width_box_line], rax
-    ; call fill_box
-    ;
+    ; fills the space with whitespaces and closes the box
+    call fill_box
+
     ; prints a newline
     mov rax, 1
     mov rdi, 1
@@ -230,7 +293,11 @@ print_result:
     ret
 
 
-print_table:
+; print_horizontal_line
+; +-------------------------------------+
+; Prints the horizontal line of the box made of the box corner (+) and the box line (-).
+; The width of the line is set by the width_box_line variable.
+print_horizontal_line:
     ; prints corner of the box (+)
     mov rax, 1
     mov rdi, 1
@@ -256,6 +323,10 @@ print_table:
     syscall
     ret
 
+
+; print_table_line
+; +-------------------------------------+
+; Prints the characters of the box line (-) until the width of the line is reached.
 print_table_line:
     mov rax, 1
     mov rdi, 1
@@ -267,9 +338,45 @@ print_table_line:
     mov rax, [width_box_line]
     cmp rax, 0
     jg print_table_line
+
+    mov qword [width_box_line], 30 ; resets the width of the box line to his original value
     ret
 
+ 
+; fill_box
+; +-------------------------------------+
+; Fills the box with whitespaces until the width of the line is reached.
+; It calculates the number of whitespaces to print by subtracting the 
+; space used by the label of the operation (current_len) from the width of the line.
 fill_box:
-    mov rax, 'a'
+    ; substracts the length of the string from the width of the line
+    mov rax, [width_box_line]
+    sub rax, [current_len]
     mov [fill_box_count], rax
+
+    call whitespace_loop
+
+    ; prints the outline of the box (|)
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, box_outline 
+    mov rdx, 1
+    syscall
+    ret
+
+
+; whitespace_loop
+; +-------------------------------------+
+; Prints the whitespaces until the fill_box_count variable is 0.
+whitespace_loop:
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, whitespace
+    mov rdx, whitespace_len 
+    syscall
+
+    dec qword [fill_box_count]
+    mov rax, [fill_box_count]
+    cmp rax, 0
+    jg whitespace_loop
     ret

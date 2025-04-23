@@ -1,6 +1,12 @@
 section .data
-    vertical_line db "+----------------------+", 0xA
-    vertical_line_len equ $ - vertical_line
+    box_corner db "+"
+    box_corner_len equ 1
+
+    box_line db "-"
+    box_line_len equ 1
+
+    whitespace db " "
+    whitespace_len equ 1
 
     and_msg db "| And: | "
     and_len equ $ - and_msg
@@ -18,6 +24,10 @@ section .data
     not2_len equ $ - not2_msg
 
     newline db 0xA
+    width_box_line dq 30
+
+section .bss
+    fill_box_count resb 1
 
 section .text
     global _start
@@ -30,12 +40,23 @@ _start:
     push rax
     push rdi
 
+    ; prints top of the box (+------------+)
+    call print_table
+
     ; Prints the string "And:"
     mov rax, 1
     mov rdi, 1
     mov rsi, and_msg
     mov rdx, and_len
     syscall
+
+    ; call fill_box
+    ; ; prints the result
+    ; mov rax, 1
+    ; mov rdi, 1
+    ; lea rsi, [fill_box_count] 
+    ; mov rdx, 1
+    ; syscall
 
     ; Makes the AND operation and prints the result
     call and_op
@@ -193,6 +214,11 @@ print_result:
     mov rdx, 1
     syscall
 
+    ; mov rax, width_box_line
+    ; sub rax, and_len
+    ; mov [width_box_line], rax
+    ; call fill_box
+    ;
     ; prints a newline
     mov rax, 1
     mov rdi, 1
@@ -200,12 +226,50 @@ print_result:
     mov rdx, 1
     syscall
 
-    ; prints the result
+    pop rax ; Pops the value pushed before so the stack pointer is again the return address.
+    ret
+
+
+print_table:
+    ; prints corner of the box (+)
     mov rax, 1
     mov rdi, 1
-    lea rsi, vertical_line 
-    mov rdx, vertical_line_len
+    mov rsi, box_corner
+    mov rdx, box_corner_len
     syscall
 
-    pop rax ; Pops the value pushed before so the stack pointer is again the return address.
+    ; prints the line of the box (-------)
+    call print_table_line
+
+    ; closes the corner of the box (+)
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, box_corner
+    mov rdx, box_corner_len
+    syscall
+
+    ; prints newline
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, newline
+    mov rdx, 1
+    syscall
+    ret
+
+print_table_line:
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, box_line
+    mov rdx, box_line_len
+    syscall
+
+    dec qword [width_box_line]
+    mov rax, [width_box_line]
+    cmp rax, 0
+    jg print_table_line
+    ret
+
+fill_box:
+    mov rax, 'a'
+    mov [fill_box_count], rax
     ret

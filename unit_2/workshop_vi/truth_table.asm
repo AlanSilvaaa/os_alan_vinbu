@@ -32,20 +32,34 @@ section .data
     newline db 0xA
     width_box_line dq 30
 
+    first_input_solicitude db "Input the first binary value (0,1): ", 0xA
+    len_input_1 equ $ - first_input_solicitude
+
+    second_input_solicitude db "Input the second binary value (0,1): ", 0xA
+    len_input_2 equ $ - second_input_solicitude
+
 section .bss
     fill_box_count resq 1
     current_len resq 1
+
+    first_input resb 1
+    second_input resb 1
 
 section .text
     global _start
 
 
 _start:
-    ; Pushes the input values (for now hardcoded to 1 and 0)
-    mov rax, 1
-    mov rdi, 0
+    ;call to get_values, binary values
+    call get_values
     push rax
     push rdi
+
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, newline
+    mov rdx, 1
+    syscall
 
     ; prints top of the box (+------------+)
     call print_horizontal_line
@@ -185,6 +199,44 @@ _start:
     mov rax, 60
     mov rdi, 0
     syscall
+
+
+;make a petition to the user to get the binary values to process
+get_values:
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, first_input_solicitude
+    mov rdx, len_input_1
+    syscall
+
+    mov rax, 0
+    mov rdi, 0
+    mov rsi, first_input
+    mov rdx, 2
+    syscall
+
+    movzx rax, byte [first_input]
+    sub rax, 48
+    push rax
+
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, second_input_solicitude
+    mov rdx, len_input_2
+    syscall
+
+    mov rax, 0
+    mov rdi, 0
+    mov rsi, second_input
+    mov rdx, 2
+    syscall
+
+    movzx rdi, byte [second_input]
+    sub rdi, 48
+    pop rax
+
+    ret
+
 
 
 ; and_op

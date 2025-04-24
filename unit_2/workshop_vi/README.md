@@ -26,6 +26,7 @@ To run the code, execute the `truth_table`
 ```bash
 ./truth_table
 ```
+When you run it it will be a solicitude to two binary inputs, it can be "1" or "0".
 
 ## Docker
 You can run the code using Docker. The Dockerfile is included in the repository. To build the Docker image, run:
@@ -38,3 +39,4 @@ To run the Docker container, use:
 docker run --rm truth_table
 ```
 
+When you run it it will be a solicitude to two binary inputs, it can be "1" or "0".

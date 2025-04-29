@@ -201,7 +201,7 @@ _start:
     syscall
 
 
-;make a petition to the user to get the binary values to process
+; make a petition to the user to get the binary values to process
 get_values:
     mov rax, 1
     mov rdi, 1

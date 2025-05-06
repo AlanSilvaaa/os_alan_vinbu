@@ -2,6 +2,7 @@
 #include <chrono>
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
+#include "./modules.h"
 
 /**
  * @brief Generates a random color image of the specified dimensions.
@@ -29,7 +30,7 @@ cv::Mat generateRandomImage(int width, int height) {
     return randomImage;
 }
 
-int main(int argc, char **argv) {
+int generator() {
     int imageWidth = 1920;
     int imageHeight = 1280;
 

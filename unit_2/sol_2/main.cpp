@@ -31,6 +31,6 @@ int main(int argc, char *argv[]) {
     
     std::cout << minutes << std::endl;
 
-    generator();
+    main_generator();
     return 0;
 }

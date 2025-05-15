@@ -1,6 +1,7 @@
 #ifndef MODULES_H
 #define MODULES_H
 
-int generator();
+void* generator();
+int main_generator();
 
 #endif

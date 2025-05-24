@@ -1,12 +1,15 @@
 #include <iostream>
 #include <pthread.h>
 #include <queue>
+#include <chrono>
+#include <thread>
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
 #include "./modules.h"
 
-#define NUM_THREADS 4
-#define TOTAL_IMAGES 50
+#define NUM_THREADS   4
+#define TOTAL_IMAGES  50
+#define CYCLES        3   // how many one-second cycles
 
 using namespace std;
 
@@ -15,118 +18,139 @@ struct img_data {
     cv::Mat img;
 };
 
-struct Dimensions{
+struct Dimensions {
     int imageWidth;
     int imageHeight;
 };
 
-// Shared queue & sync primitives
-queue<img_data> q;
-pthread_mutex_t queueMutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t queueCond  = PTHREAD_COND_INITIALIZER;
-bool producerDone = false;
+// Shared state
+static queue<img_data>  q;
+static pthread_mutex_t  queueMutex   = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t   queueCond    = PTHREAD_COND_INITIALIZER;
+static bool             producerDone = false;
+static bool             timedOut     = false;
 
-/**
- * @brief Generates a random color image of the specified dimensions.
- *
- * Creates an 8-bit, 3-channel (BGR format by default in OpenCV) image
- * and fills each pixel's channels with random values between 0 and 255.
- *
- * @param width The desired width of the image in pixels. Must be positive.
- * @param height The desired height of the image in pixels. Must be positive.
- * @return cv::Mat An OpenCV matrix representing the generated random image.
- * Returns an empty cv::Mat if width or height are not positive.
- */
-cv::Mat generateRandomImage(int width, int height) {
-    cv::Mat img(height, width, CV_8UC3);
+// Random image generator
+cv::Mat generateRandomImage(int w, int h) {
+    cv::Mat img(h, w, CV_8UC3);
     cv::randu(img, cv::Scalar::all(0), cv::Scalar::all(255));
     return img;
 }
 
-// Producer: runs in thread 0
+// Producer: checks timedOut under lock
 void* producer(void* arg) {
-    Dimensions* dimensions = static_cast<Dimensions*>(arg);
-    int w = dimensions->imageWidth;
-    int h = dimensions->imageHeight;
+    Dimensions* dim = static_cast<Dimensions*>(arg);
     for (int i = 0; i < TOTAL_IMAGES; ++i) {
-        cv::Mat img = generateRandomImage(w, h);
-        img_data data;
-        data.id = i;
-        data.img = img;
-
-        // push into queue
         pthread_mutex_lock(&queueMutex);
+        if (timedOut) {
+            pthread_mutex_unlock(&queueMutex);
+            break;
+        }
+        pthread_mutex_unlock(&queueMutex);
+
+        cv::Mat img = generateRandomImage(dim->imageWidth, dim->imageHeight);
+        img_data data{ i, img };
+
+        pthread_mutex_lock(&queueMutex);
+        // double-check in case timedOut flipped
+        if (timedOut) {
+            pthread_mutex_unlock(&queueMutex);
+            break;
+        }
         q.push(data);
-        cout << "[Producer] queued image " << i+1 
-            << ", queue size = " << q.size() << "\n";
+        cout << "[Producer] queued image " << (i+1)
+             << ", queue size = " << q.size() << "\n";
         pthread_cond_signal(&queueCond);
         pthread_mutex_unlock(&queueMutex);
     }
 
-    // signal consumers to exit when queue is drained
+    // signal consumers to exit
     pthread_mutex_lock(&queueMutex);
     producerDone = true;
     pthread_cond_broadcast(&queueCond);
     pthread_mutex_unlock(&queueMutex);
-
     return nullptr;
 }
 
-// Consumer: threads 1..NUM_THREADS-1
+// Consumer: stops if queue empty and (producerDone || timedOut)
 void* consumer(void* arg) {
-    int threadId = (int)(size_t)arg;
+    int tid = (int)(size_t)arg;
     while (true) {
         pthread_mutex_lock(&queueMutex);
-        // wait until there's work or producer is done
-        while (q.empty() && !producerDone) {
+        while (q.empty() && !producerDone && !timedOut) {
             pthread_cond_wait(&queueCond, &queueMutex);
         }
-
-        // if no work & producer done => exit
-        if (q.empty() && producerDone) {
+        if (q.empty() && (producerDone || timedOut)) {
             pthread_mutex_unlock(&queueMutex);
             break;
         }
-
-        // pop one image
-        cv::Mat img = q.front().img;
-        int id = q.front().id + 1; // 1-based index
+        img_data item = q.front();
         q.pop();
         int remaining = q.size();
         pthread_mutex_unlock(&queueMutex);
 
-        string filename = "../out/random_image_" + to_string(id) + ".jpg";
-        cv::imwrite(filename, img);
-        cout << "[Consumer " << threadId << "] saved " 
-            << filename << ", queue size = " << remaining << "\n";
+        string filename = "../out/random_image_" + to_string(item.id+1) + ".jpg";
+        cv::imwrite(filename, item.img);
+        cout << "[Consumer " << tid << "] saved " << filename
+             << ", queue size = " << remaining << "\n";
     }
-
     return nullptr;
 }
 
-int main_generator() {
-    pthread_t threads[NUM_THREADS];
-    Dimensions* dimensions = new Dimensions{1920, 1280};
+// clear queue under lock
+static void clearQueue() {
+    pthread_mutex_lock(&queueMutex);
+    while (!q.empty()) q.pop();
+    pthread_mutex_unlock(&queueMutex);
+}
 
-    auto start = std::chrono::high_resolution_clock::now();
-    // start producer
-    pthread_create(&threads[0], nullptr, producer, dimensions);
-    // start consumers, pass them IDs 1..NUM_THREADS-1
+// run one 50-image burst with timeout
+static void run_one_cycle(Dimensions* dim) {
+    // reset state
+    pthread_mutex_lock(&queueMutex);
+    producerDone = false;
+    timedOut     = false;
+    while (!q.empty()) q.pop();
+    pthread_mutex_unlock(&queueMutex);
+
+    pthread_t threads[NUM_THREADS];
+    pthread_create(&threads[0], nullptr, producer, dim);
     for (int i = 1; i < NUM_THREADS; ++i) {
         pthread_create(&threads[i], nullptr, consumer, (void*)(size_t)i);
     }
 
-    // join all
+    // watch for 1 s timeout
+    thread watchdog([&](){
+        this_thread::sleep_for(chrono::seconds(1));
+        pthread_mutex_lock(&queueMutex);
+        timedOut     = true;
+        producerDone = true;
+        while (!q.empty()) q.pop();
+        pthread_cond_broadcast(&queueCond);
+        pthread_mutex_unlock(&queueMutex);
+    });
+
+    // join all worker threads
     for (int i = 0; i < NUM_THREADS; ++i) {
         pthread_join(threads[i], nullptr);
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end - start;
-    std::cout << "Elapsed time: " << elapsed.count() << " seconds." << std::endl << std::flush;
-    delete dimensions;
+    // ensure that this cycle’s watchdog can’t bleed into the next one
+    watchdog.join();
+}
 
-    cout << "All done.\n";
+
+int main_generator() {
+    Dimensions* dim = new Dimensions{1920, 1280};
+
+    for (int cycle = 1; cycle <= CYCLES; ++cycle) {
+        cout << "\n=== Cycle " << cycle << " start ===\n";
+        run_one_cycle(dim);
+        cout << "=== Cycle " << cycle << " end ===\n";
+    }
+
+    cout << "\nAll " << CYCLES << " cycles complete.\n";
+    delete dim;
     return 0;
 }
 

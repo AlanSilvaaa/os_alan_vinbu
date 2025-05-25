@@ -15,6 +15,11 @@ int main(int argc, char *argv[]) {
         .default_value(5)
         .scan<'i', int>();
 
+    program.add_argument("-t")
+        .help("Set threads´ number")
+        .default_value(8)
+        .scan<'i', int>();
+
     try {
         program.parse_args(argc, argv);
     }
@@ -26,11 +31,14 @@ int main(int argc, char *argv[]) {
 
     auto frames = program.get<int>("-f");
     auto minutes = program.get<int>("-m");
+    auto threads = program.get<int>("-t");
 
     std::cout << frames << std::endl;
     
     std::cout << minutes << std::endl;
 
-    main_generator();
+    std::cout << threads << std::endl;
+
+    main_generator(frames, minutes, threads);
     return 0;
 }

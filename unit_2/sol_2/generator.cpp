@@ -48,7 +48,15 @@ cv::Mat generateRandomImage(int w, int h) {
 // Producer: checks timedOut under lock
 void* producer(void* arg) {
     Requirements* req = static_cast<Requirements*>(arg);
+
+    // target frame interval = 1/50 sec = 0.02 sec
+    const auto framePeriod = std::chrono::duration<double>(1.0 / 50.0);
+
     for (int i = 0; i < req->frames; ++i) {
+        // mark start of this frame
+        auto start = std::chrono::high_resolution_clock::now();
+
+        // quick timedOut check
         pthread_mutex_lock(&queueMutex);
         if (timedOut) {
             pthread_mutex_unlock(&queueMutex);
@@ -56,20 +64,34 @@ void* producer(void* arg) {
         }
         pthread_mutex_unlock(&queueMutex);
 
+        // generate the image
         cv::Mat img = generateRandomImage(req->imageWidth, req->imageHeight);
         img_data data{ i, img };
 
+        // figure out how long generation + queueing took
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+
+        // sleep for the remainder of the 20 ms slot
+        if (elapsed < framePeriod) {
+            cout << "time elapsed for frame " << (i+1) << ": "
+                 << elapsed.count() << " seconds\n";
+            cout << "sleeping for " << (framePeriod - elapsed).count() << " seconds\n";
+            std::this_thread::sleep_for(framePeriod - elapsed);
+        }
+
+        // push into the queue
         pthread_mutex_lock(&queueMutex);
-        // double-check in case timedOut flipped
-        if (timedOut) {
+        if (timedOut) {  // double-check before pushing
             pthread_mutex_unlock(&queueMutex);
             break;
         }
         q.push(data);
-        cout << "[Producer] queued image " << (i+1)
-             << ", queue size = " << q.size() << "\n";
+        std::cout << "[Producer] queued image " << (i+1)
+                  << ", queue size = " << q.size() << "\n";
         pthread_cond_signal(&queueCond);
         pthread_mutex_unlock(&queueMutex);
+
     }
 
     // signal consumers to exit
@@ -79,6 +101,7 @@ void* producer(void* arg) {
     pthread_mutex_unlock(&queueMutex);
     return nullptr;
 }
+
 
 // Consumer: stops if queue empty and (producerDone || timedOut)
 void* consumer(void* arg) {
@@ -155,7 +178,7 @@ static void run_one_cycle(Requirements* req, int cycle) {
 
 
 int main_generator(int frames, int minutes, int num_threads) {
-    Requirements* req = new Requirements{1920, 1280, frames, num_threads};
+    Requirements* req = new Requirements{1280, 720, frames, num_threads};
 
     for (int cycle = 1; cycle <= CYCLES; ++cycle) {
         cout << "\n=== Cycle " << cycle << " start ===\n";

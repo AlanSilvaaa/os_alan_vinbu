@@ -34,11 +34,6 @@ static pthread_cond_t queueCond = PTHREAD_COND_INITIALIZER;
 static bool producerDone = false;
 static bool timedOut = false;
 
-// Counters & mutex for logging
-static int imagesGenerated = 0;
-static int imagesSaved = 0;
-static pthread_mutex_t countMutex = PTHREAD_MUTEX_INITIALIZER;
-
 // Random image generator
 cv::Mat generateRandomImage(int w, int h) {
     cv::Mat img(h, w, CV_8UC3);
@@ -46,43 +41,18 @@ cv::Mat generateRandomImage(int w, int h) {
     return img;
 }
 
-// Logger thread: prints counts every second
-void* logger(void* arg) {
-    using namespace std::chrono;
-    while (true) {
-        this_thread::sleep_for(seconds(1));
-
-        // Check if done
-        pthread_mutex_lock(&queueMutex);
-        bool done = producerDone && q.empty();
-        pthread_mutex_unlock(&queueMutex);
-
-        // Print and reset counts
-        pthread_mutex_lock(&countMutex);
-        cout << "[Logger] Generated: " << imagesGenerated
-             << ", Saved: " << imagesSaved << " images in last second\n";
-        imagesGenerated = 0;
-        imagesSaved = 0;
-        pthread_mutex_unlock(&countMutex);
-
-        if (done) break;
-    }
-    return nullptr;
-}
-
-// Producer thread
+// Producer
 void* producer(void* arg) {
     Requirements* req = static_cast<Requirements*>(arg);
-    const double fps = req->frames;
-    const auto framePeriod = chrono::duration<double>(1.0 / fps);
-    auto startTime = chrono::high_resolution_clock::now();
-    auto endTime = startTime + chrono::minutes(req->duration_minutes);
-    // auto endTime = startTime + chrono::seconds(10); // For testing, use a shorter duration. Comment the above line and uncomment this one.
+    const double fps = req -> frames;
+    const auto framePeriod = std::chrono::duration<double>(1.0 / fps);
+    auto startTime = std::chrono::high_resolution_clock::now();
+    auto endTime = startTime + std::chrono::minutes(req->duration_minutes);
 
     int frame_id = 0;
 
-    while (chrono::high_resolution_clock::now() < endTime) {
-        auto frameStart = chrono::high_resolution_clock::now();
+    while (std::chrono::high_resolution_clock::now() < endTime) {
+        auto frameStart = std::chrono::high_resolution_clock::now();
 
         pthread_mutex_lock(&queueMutex);
         if (timedOut) {
@@ -93,34 +63,29 @@ void* producer(void* arg) {
 
         // Generate image
         cv::Mat img = generateRandomImage(req->imageWidth, req->imageHeight);
-        img_data data{ frame_id, img };
-        frame_id++;
+        img_data data{ frame_id++, img };
 
-        // Ensure constant frame rate
-        auto frameEnd = chrono::high_resolution_clock::now();
-        chrono::duration<double> elapsed = frameEnd - frameStart;
+        // Measure time taken
+        auto frameEnd = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = frameEnd - frameStart;
+
         if (elapsed < framePeriod) {
-            this_thread::sleep_for(framePeriod - elapsed);
+            std::this_thread::sleep_for(framePeriod - elapsed);
         }
 
-        // Push to queue and count
+        // Push to queue
         pthread_mutex_lock(&queueMutex);
         if (timedOut) {
             pthread_mutex_unlock(&queueMutex);
             break;
         }
         q.push(data);
-        pthread_mutex_unlock(&queueMutex);
-
-        pthread_mutex_lock(&countMutex);
-        imagesGenerated++;
-        pthread_mutex_unlock(&countMutex);
-
-        // cout << "[Producer] queued image " << data.id
-        //      << ", queue size = " << q.size() << "\n";
+        std::cout << "[Producer] queued image " << frame_id
+                  << ", queue size = " << q.size() << "\n";
         pthread_cond_signal(&queueCond);
+        pthread_mutex_unlock(&queueMutex);
     }
-
+    std::cout << "Fps saved while execution " << frame_id / ((req->duration_minutes*60)) << "\n";
     pthread_mutex_lock(&queueMutex);
     producerDone = true;
     pthread_cond_broadcast(&queueCond);
@@ -128,7 +93,7 @@ void* producer(void* arg) {
     return nullptr;
 }
 
-// Consumer thread
+// Consumer
 void* consumer(void* arg) {
     Consumer_Args* cargs = static_cast<Consumer_Args*>(arg);
     Requirements* req = cargs->req;
@@ -148,16 +113,10 @@ void* consumer(void* arg) {
         int remaining = q.size();
         pthread_mutex_unlock(&queueMutex);
 
-        // Save image
         string filename = "../out/random_image_" + to_string(item.id) + ".jpg";
         cv::imwrite(filename, item.img);
-
-        pthread_mutex_lock(&countMutex);
-        imagesSaved++;
-        pthread_mutex_unlock(&countMutex);
-
-        // cout << "[Consumer " << tid << "] saved " << filename
-        //      << ", queue size = " << remaining << "\n";
+        cout << "[Consumer " << tid << "] saved " << filename
+             << ", queue size = " << remaining << "\n";
     }
     return nullptr;
 }
@@ -177,38 +136,20 @@ int main_generator(int frames, int minutes, int num_threads) {
     // Create threads
     pthread_t threads[num_threads];
     pthread_create(&threads[0], nullptr, producer, req);
+
     for (int i = 1; i < num_threads; ++i) {
         args[i].thread_id = i;
         args[i].req = req;
-        pthread_create(&threads[i], nullptr, consumer, &args[i]);
+        pthread_create(&threads[i], nullptr, consumer, (void*)&args[i]);
     }
-
-    // Start logger
-    pthread_t loggerThread;
-    pthread_create(&loggerThread, nullptr, logger, nullptr);
 
     // Wait for threads to finish
     for (int i = 0; i < num_threads; ++i) {
         pthread_join(threads[i], nullptr);
     }
 
-    // Wait for logger
-    pthread_join(loggerThread, nullptr);
-
     delete[] args;
     delete req;
-    cout << "\nCaptura finalizada después de " << minutes << " minutos.\n";
+    std::cout << "\nCaptura finalizada después de " << minutes << " minutos.\n";
     return 0;
 }
-
-int main_generator(int argc, char* argv[]) {
-    if (argc != 4) {
-        cerr << "Usage: " << argv[0] << " <fps> <minutes> <num_threads>\n";
-        return 1;
-    }
-    int fps = stoi(argv[1]);
-    int minutes = stoi(argv[2]);
-    int num_threads = stoi(argv[3]);
-    return main_generator(fps, minutes, num_threads);
-}
-
